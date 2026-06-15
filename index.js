@@ -97,6 +97,11 @@ async function run() {
 
     //.......products........
 
+    app.get('/seller/products',async(req,res)=>{
+      const result=await productsCollection.find().toArray()
+      res.json(result)
+    })
+
     app.post('/seller/products', verifyToken, sellerVerify, async (req, res) => {
       const data = req.body;
       const result = await productsCollection.insertOne({ ...data, userId: req.user.id })
