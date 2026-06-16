@@ -6,6 +6,7 @@ const dontenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
+const { title } = require('node:process');
 dontenv.config();
 
 const uri = process.env.MONGODB_URI;
@@ -68,6 +69,7 @@ async function run() {
     const subscriptionCollection = db.collection('subscription')
     const userCollection = db.collection('user')
     const productsCollection = db.collection('products')
+    const paymentCollection=db.collection('payments')
 
 
     app.post('/subscription', async (req, res) => {
@@ -97,9 +99,13 @@ async function run() {
 
     //.......products........
 
-    app.get('/seller/products',async(req,res)=>{
-      const result=await productsCollection.find().toArray()
-      res.json(result)
+    app.get('/seller/products', verifyToken, sellerVerify, async (req, res) => {
+      const { page = 1, limit = 6 } = req.query;
+      const skip = (Number(page - 1)) * Number(limit)
+      const result = await productsCollection.find({ userId: req.user.id }).skip(skip).limit(Number(limit)).toArray()
+      const totalData = await productsCollection.countDocuments({ userId: req.user.id })
+      const totalPage = Math.ceil(totalData / Number(limit))
+      res.json({ data: result, page: Number(page), totalPage })
     })
 
     app.post('/seller/products', verifyToken, sellerVerify, async (req, res) => {
@@ -107,6 +113,50 @@ async function run() {
       const result = await productsCollection.insertOne({ ...data, userId: req.user.id })
       res.send(result)
     })
+
+    app.get('/products', async (req, res) => {
+      const { search } = req.query;
+      const query = {}
+      if (search && search !== 'undefined' && search.trim() !== '') {
+        query.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ]
+      }
+
+      const result = await productsCollection.find(query).toArray()
+      res.json(result)
+      // console.log(result)
+    })
+
+    app.get('/products/:id',async(req,res)=>{
+      const {id}=req.params;
+      const result=await productsCollection.findOne({_id:new ObjectId(id)})
+      res.json(result)
+    })
+
+    //.......payments.........
+
+    
+    app.post('/payments', async (req, res) => {
+      const {userEmail, sessionId, userId, priceId } = req.body;
+      const isExist = await paymentCollection.findOne({ sessionId })
+      if (isExist) {
+        return res.json({ msg: 'already Exist!' })
+      }
+      const result=await paymentCollection.insertOne(
+        {
+          sessionId,
+          priceId,
+          userId,
+          userEmail,
+          paidAt: new Date()
+        }
+      )
+      res.json(result)
+    })
+
+
 
 
 
